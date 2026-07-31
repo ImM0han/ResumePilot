@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { FiMenu, FiX, FiMoon, FiSun, FiZap } from 'react-icons/fi';
+import {
+  FiMenu,
+  FiX,
+  FiMoon,
+  FiSun,
+  FiZap,
+} from 'react-icons/fi';
+
 import RecentActivityMenu from './RecentActivityMenu.jsx';
 import InstallAppButton from '../InstallAppButton';
 
@@ -15,6 +22,7 @@ const LINKS = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+
   const [dark, setDark] = useState(
     () => localStorage.getItem('theme') === 'dark'
   );
@@ -26,23 +34,28 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-xl">
+
       <nav className="page-container flex items-center justify-between h-16">
 
-        {/* Logo */}
+        {/* ================= LOGO ================= */}
         <NavLink
           to="/"
-          className="flex items-center gap-2 font-extrabold text-lg"
+          className="flex items-center gap-2 font-extrabold text-lg shrink-0"
         >
           <span className="grid place-items-center w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-accent-600 text-white">
             <FiZap size={16} />
           </span>
 
-          <span>
+          <span className="hidden sm:inline">
             ResumePilot <span className="text-brand-600">AI</span>
+          </span>
+
+          <span className="sm:hidden">
+            ResumePilot
           </span>
         </NavLink>
 
-        {/* Desktop Navigation */}
+        {/* ================= DESKTOP LINKS ================= */}
         <div className="hidden lg:flex items-center gap-1">
           {LINKS.map((link) => (
             <NavLink
@@ -61,11 +74,13 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Right Side */}
+        {/* ================= RIGHT SIDE ================= */}
         <div className="flex items-center gap-2">
 
-          {/* Recent Activity */}
-          <RecentActivityMenu />
+          {/* Recent Activity - Desktop */}
+          <div className="hidden sm:block">
+            <RecentActivityMenu />
+          </div>
 
           {/* Dark Mode */}
           <button
@@ -73,30 +88,36 @@ export default function Navbar() {
             aria-label="Toggle dark mode"
             className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 dark:text-slate-300"
           >
-            {dark ? <FiSun size={18} /> : <FiMoon size={18} />}
+            {dark ? (
+              <FiSun size={18} />
+            ) : (
+              <FiMoon size={18} />
+            )}
           </button>
 
-          {/* Get App */}
-          <div className="hidden sm:block">
-            <InstallAppButton />
-          </div>
+          {/* ================= GET APP ================= */}
+          <InstallAppButton />
 
-          {/* Mobile Menu Button */}
+          {/* ================= MOBILE MENU ================= */}
           <button
             className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"
             onClick={() => setOpen((o) => !o)}
             aria-label="Toggle navigation menu"
+            type="button"
           >
-            {open ? <FiX size={22} /> : <FiMenu size={22} />}
+            {open ? (
+              <FiX size={22} />
+            ) : (
+              <FiMenu size={22} />
+            )}
           </button>
         </div>
       </nav>
 
-      {/* Mobile Menu */}
+      {/* ================= MOBILE MENU ================= */}
       {open && (
-        <div className="lg:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-2 bg-white dark:bg-surface-dark">
+        <div className="lg:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-1 bg-white dark:bg-surface-dark">
 
-          {/* Navigation Links */}
           {LINKS.map((link) => (
             <NavLink
               key={link.to}
@@ -114,9 +135,9 @@ export default function Navbar() {
             </NavLink>
           ))}
 
-          {/* Mobile Get App */}
+          {/* Recent Activity - Mobile */}
           <div className="pt-2">
-            <InstallAppButton />
+            <RecentActivityMenu />
           </div>
         </div>
       )}
