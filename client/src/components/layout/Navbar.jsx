@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { FiMenu, FiX, FiMoon, FiSun, FiZap } from 'react-icons/fi';
 import RecentActivityMenu from './RecentActivityMenu.jsx';
+import InstallAppButton from '../InstallAppButton';
 
 const LINKS = [
   { to: '/resume-builder', label: 'Builder' },
@@ -14,7 +15,9 @@ const LINKS = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
-  const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [dark, setDark] = useState(
+    () => localStorage.getItem('theme') === 'dark'
+  );
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
@@ -24,15 +27,22 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-xl">
       <nav className="page-container flex items-center justify-between h-16">
-        <NavLink to="/" className="flex items-center gap-2 font-extrabold text-lg">
+
+        {/* Logo */}
+        <NavLink
+          to="/"
+          className="flex items-center gap-2 font-extrabold text-lg"
+        >
           <span className="grid place-items-center w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-accent-600 text-white">
             <FiZap size={16} />
           </span>
+
           <span>
             ResumePilot <span className="text-brand-600">AI</span>
           </span>
         </NavLink>
 
+        {/* Desktop Navigation */}
         <div className="hidden lg:flex items-center gap-1">
           {LINKS.map((link) => (
             <NavLink
@@ -51,8 +61,13 @@ export default function Navbar() {
           ))}
         </div>
 
+        {/* Right Side */}
         <div className="flex items-center gap-2">
+
+          {/* Recent Activity */}
           <RecentActivityMenu />
+
+          {/* Dark Mode */}
           <button
             onClick={() => setDark((d) => !d)}
             aria-label="Toggle dark mode"
@@ -60,20 +75,28 @@ export default function Navbar() {
           >
             {dark ? <FiSun size={18} /> : <FiMoon size={18} />}
           </button>
-          <NavLink to="/resume-builder" className="btn-primary hidden sm:inline-flex !px-4 !py-2">
-            Get Started
-          </NavLink>
+
+          {/* Get App */}
+          <div className="hidden sm:block">
+            <InstallAppButton />
+          </div>
+
+          {/* Mobile Menu Button */}
           <button
             className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10"
             onClick={() => setOpen((o) => !o)}
+            aria-label="Toggle navigation menu"
           >
             {open ? <FiX size={22} /> : <FiMenu size={22} />}
           </button>
         </div>
       </nav>
 
+      {/* Mobile Menu */}
       {open && (
-        <div className="lg:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-1 bg-white dark:bg-surface-dark">
+        <div className="lg:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-2 bg-white dark:bg-surface-dark">
+
+          {/* Navigation Links */}
           {LINKS.map((link) => (
             <NavLink
               key={link.to}
@@ -81,13 +104,20 @@ export default function Navbar() {
               onClick={() => setOpen(false)}
               className={({ isActive }) =>
                 `block px-3 py-2 rounded-lg text-sm font-medium ${
-                  isActive ? 'text-brand-600 bg-brand-50 dark:bg-brand-500/10' : 'text-slate-600 dark:text-slate-300'
+                  isActive
+                    ? 'text-brand-600 bg-brand-50 dark:bg-brand-500/10'
+                    : 'text-slate-600 dark:text-slate-300'
                 }`
               }
             >
               {link.label}
             </NavLink>
           ))}
+
+          {/* Mobile Get App */}
+          <div className="pt-2">
+            <InstallAppButton />
+          </div>
         </div>
       )}
     </header>
