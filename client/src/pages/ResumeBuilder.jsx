@@ -481,7 +481,7 @@ export default function ResumeBuilder() {
                   onChange={(e) =>
                     updateField('name', e.target.value)
                   }
-                  placeholder="Lal Mohan Saw"
+                  placeholder="Name"
                   required
                 />
 
@@ -686,7 +686,7 @@ export default function ResumeBuilder() {
                               e.target.value
                             )
                           }
-                          placeholder="7.68 / 10"
+                          placeholder="8 / 10"
                         />
 
                         <Field
