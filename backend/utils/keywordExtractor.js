@@ -54,12 +54,41 @@ const JD_BOILERPLATE = new Set([
   'employment', 'apply', 'application', 'join', 'joining', 'love', 'like', 'want', 'wanted',
 ]);
 
+function standardizeText(text = '') {
+  let norm = ` ${normalize(text)} `;
+  const replacements = [
+    [/ front[- ]end /g, ' frontend '],
+    [/ back[- ]end /g, ' backend '],
+    [/ full[- ]stack /g, ' fullstack '],
+    [/ ci[-/ ]cd /g, ' cicd '],
+    [/ react\.?js /g, ' react '],
+    [/ node\.?js /g, ' node '],
+    [/ express\.?js /g, ' express '],
+    [/ next\.?js /g, ' next '],
+    [/ vue\.?js /g, ' vue '],
+    [/ github actions /g, ' githubactions '],
+    [/ google cloud( platform)? /g, ' gcp '],
+    [/ amazon web services /g, ' aws '],
+    [/ artificial intelligence /g, ' ai '],
+    [/ machine learning /g, ' ml '],
+    [/ deep learning /g, ' dl '],
+    [/ natural language processing /g, ' nlp '],
+    [/ quality assurance /g, ' qa '],
+    [/ postgres(ql)? /g, ' postgresql '],
+  ];
+  replacements.forEach(([regex, repl]) => {
+    norm = norm.replace(regex, repl);
+  });
+  return norm;
+}
+
 function extractKnownSkills(text = '') {
-  const normalized = ` ${normalize(text)} `;
+  const normalized = standardizeText(text);
   const found = new Set();
 
   SORTED_SKILLS.forEach((skill) => {
-    const pattern = ` ${skill.toLowerCase()} `;
+    const stdSkill = standardizeText(skill).trim();
+    const pattern = ` ${stdSkill} `;
     if (normalized.includes(pattern)) {
       found.add(skill);
     }
@@ -70,10 +99,11 @@ function extractKnownSkills(text = '') {
 
 /** Counts how many times each curated skill appears (repetition = importance signal). */
 function countSkillOccurrences(text = '') {
-  const normalized = ` ${normalize(text)} `;
+  const normalized = standardizeText(text);
   const counts = {};
   SORTED_SKILLS.forEach((skill) => {
-    const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const stdSkill = standardizeText(skill).trim();
+    const escaped = stdSkill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(` ${escaped} `, 'g');
     const matches = normalized.match(regex);
     if (matches) counts[skill] = matches.length;
@@ -98,6 +128,39 @@ function extractFrequentKeywords(text = '', limit = 20) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([word, count]) => ({ word, count }));
+}
+
+// Extract repeated multi-word phrases (bigrams/trigrams) to match cohesive terms
+function extractFrequentPhrases(text = '', limit = 15) {
+  const tokens = tokenize(text);
+  const phrases = {};
+
+  // Bigrams (2-word phrases)
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const w1 = tokens[i];
+    const w2 = tokens[i + 1];
+    if (JD_BOILERPLATE.has(w1) || JD_BOILERPLATE.has(w2)) continue;
+    if (w1.length < 3 || w2.length < 3) continue;
+    const bigram = `${w1} ${w2}`;
+    phrases[bigram] = (phrases[bigram] || 0) + 1;
+  }
+
+  // Trigrams (3-word phrases)
+  for (let i = 0; i < tokens.length - 2; i++) {
+    const w1 = tokens[i];
+    const w2 = tokens[i + 1];
+    const w3 = tokens[i + 2];
+    if (JD_BOILERPLATE.has(w1) || JD_BOILERPLATE.has(w3)) continue;
+    if (w1.length < 3 || w3.length < 3) continue;
+    const trigram = `${w1} ${w2} ${w3}`;
+    phrases[trigram] = (phrases[trigram] || 0) + 1;
+  }
+
+  return Object.entries(phrases)
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([phrase]) => phrase);
 }
 
 /**
@@ -178,6 +241,17 @@ function extractJDKeywords(jdText = '') {
     if (!critical.has(word) && !secondary.has(word)) secondary.add(word);
   });
 
+  // Extract frequent phrases (N-grams) and add them as secondary signals
+  extractFrequentPhrases(jdText, 15).forEach((phrase) => {
+    let alreadyCovered = false;
+    critical.forEach((c) => { if (c.toLowerCase().includes(phrase) || phrase.includes(c.toLowerCase())) alreadyCovered = true; });
+    secondary.forEach((s) => { if (s.toLowerCase().includes(phrase) || phrase.includes(s.toLowerCase())) alreadyCovered = true; });
+
+    if (!alreadyCovered) {
+      secondary.add(phrase);
+    }
+  });
+
   return {
     critical: Array.from(critical),
     secondary: Array.from(secondary),
@@ -191,10 +265,11 @@ function extractJDKeywords(jdText = '') {
  * keywords are weighted twice as heavily as secondary ones.
  */
 function analyzeKeywordMatch(jdKeywords, resumeText = '') {
-  const normalizedResume = ` ${normalize(resumeText)} `;
+  const normalizedResume = standardizeText(resumeText);
 
   const isPresent = (kw) => {
-    const escaped = kw.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const stdKw = standardizeText(kw).trim();
+    const escaped = stdKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(` ${escaped} `).test(normalizedResume);
   };
 
@@ -227,11 +302,12 @@ function analyzeKeywordMatch(jdKeywords, resumeText = '') {
 
 function keywordDensity(text = '', keywords = []) {
   const totalWords = tokenize(text).length || 1;
-  const normalizedText = ` ${normalize(text)} `;
+  const normalizedText = standardizeText(text);
   let keywordHits = 0;
 
   keywords.forEach((kw) => {
-    const escaped = kw.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const stdKw = standardizeText(kw).trim();
+    const escaped = stdKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(` ${escaped} `, 'g');
     const matches = normalizedText.match(regex);
     if (matches) keywordHits += matches.length;
@@ -246,6 +322,8 @@ module.exports = {
   extractKnownSkills,
   countSkillOccurrences,
   extractFrequentKeywords,
+  extractFrequentPhrases,
+  standardizeText,
   extractPreferredSection,
   extractJDKeywords,
   analyzeKeywordMatch,

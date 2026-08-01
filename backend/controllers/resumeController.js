@@ -716,7 +716,7 @@ async function checkATS(req, res, next) {
             data: {
                 resumeText,
 
-                atsResult,
+                ...atsResult,
 
                 heatmap,
 
@@ -798,7 +798,7 @@ async function recruiterDashboard(
 
                 resumeText,
 
-                atsResult,
+                ...atsResult,
 
                 heatmap,
 

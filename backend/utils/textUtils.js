@@ -11,6 +11,8 @@ const STOP_WORDS = new Set([
 const WEAK_VERBS = [
   'worked', 'helped', 'made', 'did', 'responsible for', 'tasked with', 'in charge of',
   'handled', 'dealt with', 'was involved in', 'participated in', 'assisted with',
+  'was given', 'was assigned to', 'duties included', 'responsibilities included',
+  'attempted to', 'strived to', 'assisted'
 ];
 
 const STRONG_ACTION_VERBS = [
@@ -19,6 +21,8 @@ const STRONG_ACTION_VERBS = [
   'automated', 'spearheaded', 'orchestrated', 'accelerated', 'transformed', 'pioneered',
   'executed', 'drove', 'scaled', 'migrated', 'deployed', 'mentored', 'negotiated',
   'analyzed', 'established', 'restructured', 'generated', 'achieved', 'exceeded',
+  'integrated', 'refactored', 'consolidated', 'modernized', 'stabilized', 'revamped',
+  'conceptualized', 'formulated', 'maximized', 'standardized', 'diagnosed', 'expedited'
 ];
 
 const BUZZWORDS = [

@@ -189,6 +189,21 @@ function scoreFormatting(resumeText) {
     issues.push('Frequent first-person pronouns ("I", "my") detected — resumes read stronger without them.');
   }
 
+  // LinkedIn profile link check
+  const hasLinkedIn = /linkedin\.com\/in\/[\w-]+/i.test(resumeText);
+  if (!hasLinkedIn) {
+    score -= 5;
+    issues.push('No LinkedIn profile URL detected — modern recruiters expect a link to your professional profile.');
+  }
+
+  // GitHub profile link check for tech positions
+  const hasGitHub = /github\.com\/[\w-]+/i.test(resumeText);
+  const isTechProfile = /(developer|engineer|programmer|coder|software|tech|data|web|backend|frontend|fullstack|cloud)/i.test(resumeText);
+  if (!hasGitHub && isTechProfile) {
+    score -= 5;
+    issues.push('No GitHub profile link detected — technical resumes benefit heavily from linking to public projects.');
+  }
+
   return { score: Math.max(0, Math.round(score)), issues, hasEmail, hasPhone, wordCount };
 }
 
@@ -248,6 +263,7 @@ function scoreActionVerbs(resumeText) {
   // rather than just "does the word appear anywhere in the whole document".
   const strongOpeners = bullets.filter((b) => {
     const firstWord = b.replace(/^[•\-*▪‣◦]\s*/, '').split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '');
+    if (!firstWord) return false;
     return strong.some((v) => v.startsWith(firstWord) || firstWord === v);
   });
 
