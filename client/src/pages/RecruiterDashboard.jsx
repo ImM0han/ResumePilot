@@ -160,15 +160,15 @@ export default function RecruiterDashboard() {
               <p className="text-xs mt-2 text-slate-400">{result.quality}</p>
             </Card>
             <Card className="text-center flex flex-col justify-center">
-              <div className="text-3xl font-bold text-brand-600">{result.keywordAnalysis.matched.length ? Math.round((result.keywordAnalysis.matched.length / (result.keywordAnalysis.totalJDKeywords || 1)) * 100) : 0}%</div>
+              <div className="text-3xl font-bold text-brand-600">{result.keywordAnalysis?.matched?.length ? Math.round((result.keywordAnalysis.matched.length / (result.keywordAnalysis.totalJDKeywords || 1)) * 100) : 0}%</div>
               <div className="text-xs text-slate-400 mt-1">Resume Match</div>
             </Card>
             <Card className="text-center flex flex-col justify-center">
-              <div className="text-3xl font-bold text-emerald-500">{result.interviewChance}%</div>
+              <div className="text-3xl font-bold text-emerald-500">{result.interviewChance ?? 0}%</div>
               <div className="text-xs text-slate-400 mt-1">Est. Interview Chance*</div>
             </Card>
             <Card className="text-center flex flex-col justify-center">
-              <div className="text-3xl font-bold text-accent-600">{result.quality}</div>
+              <div className="text-3xl font-bold text-accent-600">{result.quality || 'N/A'}</div>
               <div className="text-xs text-slate-400 mt-1">Resume Quality</div>
             </Card>
           </div>
@@ -181,55 +181,59 @@ export default function RecruiterDashboard() {
               <h3 className="font-semibold mb-3">Skills Analysis</h3>
               <p className="text-xs text-slate-400 mb-2">Matched Skills</p>
               <div className="flex flex-wrap gap-2 mb-4">
-                {result.skillsAnalysis.matched.length ? result.skillsAnalysis.matched.map((s) => <Chip key={s} variant="green">{s}</Chip>) : <span className="text-sm text-slate-400">None</span>}
+                {result.skillsAnalysis?.matched?.length ? result.skillsAnalysis.matched.map((s) => <Chip key={s} variant="green">{s}</Chip>) : <span className="text-sm text-slate-400">None</span>}
               </div>
               <p className="text-xs text-slate-400 mb-2">Missing Skills</p>
               <div className="flex flex-wrap gap-2">
-                {result.skillsAnalysis.missing.length ? result.skillsAnalysis.missing.map((s) => <Chip key={s} variant="red">{s}</Chip>) : <span className="text-sm text-slate-400">None</span>}
+                {result.skillsAnalysis?.missing?.length ? result.skillsAnalysis.missing.map((s) => <Chip key={s} variant="red">{s}</Chip>) : <span className="text-sm text-slate-400">None</span>}
               </div>
             </Card>
             <Card>
               <h3 className="font-semibold mb-3">Keyword Analysis</h3>
-              <p className="text-sm mb-2">Keyword Density: <strong>{result.keywordAnalysis.density}%</strong></p>
+              <p className="text-sm mb-2">Keyword Density: <strong>{result.keywordAnalysis?.density ?? 0}%</strong></p>
               <p className="text-xs text-slate-400 mb-2">Matched</p>
               <div className="flex flex-wrap gap-2 mb-4">
-                {result.keywordAnalysis.matched.slice(0, 12).map((k) => <Chip key={k} variant="green">{k}</Chip>)}
+                {result.keywordAnalysis?.matched?.slice(0, 12).map((k) => <Chip key={k} variant="green">{k}</Chip>)}
               </div>
               <p className="text-xs text-slate-400 mb-2">Missing (Critical)</p>
               <div className="flex flex-wrap gap-2">
-                {result.keywordAnalysis.missing.slice(0, 12).map((k) => <Chip key={k} variant="red">{k}</Chip>)}
+                {result.keywordAnalysis?.missing?.slice(0, 12).map((k) => <Chip key={k} variant="red">{k}</Chip>)}
               </div>
             </Card>
           </div>
 
-          <Card>
-            <h3 className="font-semibold mb-4">Resume Heatmap</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {Object.entries(result.heatmap).map(([section, status]) => (
-                <div key={section} className="text-center">
-                  <div className={`w-full h-2.5 rounded-full mb-2 ${HEATMAP_COLOR[status]}`} />
-                  <span className="text-xs capitalize text-slate-500">{section}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
+          {result.heatmap && (
+            <Card>
+              <h3 className="font-semibold mb-4">Resume Heatmap</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {Object.entries(result.heatmap).map(([section, status]) => (
+                  <div key={section} className="text-center">
+                    <div className={`w-full h-2.5 rounded-full mb-2 ${HEATMAP_COLOR[status] || 'bg-slate-300'}`} />
+                    <span className="text-xs capitalize text-slate-500">{section}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
-          <Card>
-            <h3 className="font-semibold mb-4">ATS Breakdown</h3>
-            <div className="grid md:grid-cols-2 gap-x-8 gap-y-4">
-              {Object.entries(result.breakdown).map(([key, val]) => (
-                <ProgressBar key={key} label={`${BREAKDOWN_LABELS[key]} (${val.weight}%)`} value={val.score} />
-              ))}
-            </div>
-          </Card>
+          {result.breakdown && (
+            <Card>
+              <h3 className="font-semibold mb-4">ATS Breakdown</h3>
+              <div className="grid md:grid-cols-2 gap-x-8 gap-y-4">
+                {Object.entries(result.breakdown).map(([key, val]) => (
+                  <ProgressBar key={key} label={`${BREAKDOWN_LABELS[key] || key} (${val.weight}%)`} value={val.score} />
+                ))}
+              </div>
+            </Card>
+          )}
 
           <Card>
             <h3 className="font-semibold mb-4">Resume Formatting Check</h3>
             <ul className="text-sm space-y-2">
-              {result.formattingIssues.length === 0 && (
+              {(!result.formattingIssues || result.formattingIssues.length === 0) && (
                 <li className="text-emerald-600">✓ No formatting issues detected.</li>
               )}
-              {result.formattingIssues.map((issue, i) => (
+              {result.formattingIssues?.map((issue, i) => (
                 <li key={i} className="text-rose-500">✗ {issue}</li>
               ))}
             </ul>
@@ -237,20 +241,22 @@ export default function RecruiterDashboard() {
 
           <Card>
             <h3 className="font-semibold mb-4">Resume Strength Meter</h3>
-            <ProgressBar label="Overall Resume Quality" value={result.overallScore} />
+            <ProgressBar label="Overall Resume Quality" value={result.overallScore ?? 0} />
           </Card>
 
-          <Card>
-            <h3 className="font-semibold mb-4">Top Improvements</h3>
-            <div className="space-y-3">
-              {result.topImprovements.map((imp, idx) => (
-                <div key={idx} className="flex items-start gap-3">
-                  <Chip variant={imp.impact === 'High' ? 'red' : imp.impact === 'Medium' ? 'brand' : 'neutral'}>{imp.impact}</Chip>
-                  <p className="text-sm text-slate-600 dark:text-slate-300"><strong>{imp.area}:</strong> {imp.suggestion}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
+          {result.topImprovements?.length > 0 && (
+            <Card>
+              <h3 className="font-semibold mb-4">Top Improvements</h3>
+              <div className="space-y-3">
+                {result.topImprovements.map((imp, idx) => (
+                  <div key={idx} className="flex items-start gap-3">
+                    <Chip variant={imp.impact === 'High' ? 'red' : imp.impact === 'Medium' ? 'brand' : 'neutral'}>{imp.impact}</Chip>
+                    <p className="text-sm text-slate-600 dark:text-slate-300"><strong>{imp.area}:</strong> {imp.suggestion}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <Card>
             <h3 className="font-semibold mb-3">AI Recruiter Feedback</h3>

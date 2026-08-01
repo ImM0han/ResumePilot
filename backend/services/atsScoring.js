@@ -479,21 +479,13 @@ function reconcileSkillsCoverage(resumeText, profile = {}, jobDescription = '') 
   if (!genuineAdditions.length) return resumeText;
 
   const lines = resumeText.split('\n');
-  const skillsIdx = lines.findIndex((l) =>
-    /^(TECHNICAL\s+)?SKILLS\s*$/i.test(l.trim())
-  );
+  const skillsIdx = lines.findIndex((l) => /^SKILLS\s*$/i.test(l.trim()));
   if (skillsIdx === -1 || skillsIdx + 1 >= lines.length) return resumeText;
 
-  // Prefer appending to the first non-empty skills content line (supports grouped skills).
-  let skillsLineIdx = skillsIdx + 1;
-  while (skillsLineIdx < lines.length && !lines[skillsLineIdx].trim()) {
-    skillsLineIdx += 1;
-  }
-  if (skillsLineIdx >= lines.length) return resumeText;
-
+  const skillsLineIdx = skillsIdx + 1;
   const existingLine = lines[skillsLineIdx] || '';
-  const sectionLower = lines.slice(skillsIdx, skillsIdx + 12).join('\n').toLowerCase();
-  const toAdd = genuineAdditions.filter((kw) => !sectionLower.includes(kw.toLowerCase()));
+  const existingLower = existingLine.toLowerCase();
+  const toAdd = genuineAdditions.filter((kw) => !existingLower.includes(kw.toLowerCase()));
   if (!toAdd.length) return resumeText;
 
   lines[skillsLineIdx] = `${existingLine.replace(/\s*$/, '')}${existingLine.trim() ? ', ' : ''}${toAdd.join(', ')}`;

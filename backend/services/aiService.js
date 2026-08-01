@@ -63,61 +63,22 @@ function reorderSkillsForJD(skillsList, jobDescription) {
   return [...skillsList].sort((a, b) => (priority.get(b.toLowerCase()) || 0) - (priority.get(a.toLowerCase()) || 0));
 }
 
-function formatGroupedSkills(skillsText, jobDescription) {
-  const groups = [];
-  const raw = String(skillsText || '').trim();
-  if (!raw) return groups;
-
-  const labelMap = {
-    'programming languages': 'Programming',
-    programming: 'Programming',
-    frontend: 'Frontend',
-    backend: 'Backend',
-    databases: 'Databases',
-    'data / ai / machine learning': 'Data / AI / Machine Learning',
-    'cloud / devops': 'Cloud / DevOps',
-    'core concepts': 'Core Concepts',
-    tools: 'Tools',
-  };
-
-  const chunks = raw.split(/\n+/).map((l) => l.trim()).filter(Boolean);
-  const hasLabeled = chunks.some((c) => /^[^:]+:/.test(c));
-
-  if (hasLabeled) {
-    chunks.forEach((chunk) => {
-      const m = chunk.match(/^([^:]+):\s*(.*)$/);
-      if (!m || !m[2].trim()) return;
-      const key = m[1].trim().toLowerCase();
-      const label = labelMap[key] || m[1].trim();
-      const items = reorderSkillsForJD(
-        m[2].split(/[,;]/).map((s) => s.trim()).filter(Boolean),
-        jobDescription
-      );
-      if (items.length) groups.push(`${label}: ${items.join(', ')}`);
-    });
-    return groups;
-  }
-
-  const flat = reorderSkillsForJD(
-    raw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean),
-    jobDescription
-  );
-  if (flat.length) groups.push(`Programming: ${flat.join(', ')}`);
-  return groups;
-}
-
 function fallbackBuildResume({ jobDescription, profile }) {
   const jdKeywords = jobDescription ? extractJDKeywords(jobDescription) : { critical: [], secondary: [], all: [] };
   const topJDTerms = [...jdKeywords.critical, ...jdKeywords.secondary].slice(0, 6);
-  const skillGroups = formatGroupedSkills(profile.skills, jobDescription);
-  const flatSkills = skillGroups
-    .flatMap((g) => g.replace(/^[^:]+:\s*/, '').split(',').map((s) => s.trim()).filter(Boolean));
+  const rawSkillsList = (profile.skills || '')
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const skillsList = reorderSkillsForJD(rawSkillsList, jobDescription);
 
   const lines = [];
   lines.push(profile.name || 'Your Name');
 
-  const roleBits = [profile.targetRole, ...flatSkills.slice(0, 3)].filter(Boolean);
-  if (roleBits.length) lines.push(roleBits.join(' | '));
+  // Tagline: a short role/top-skills line under the name, mirroring the
+  // classic "Role | Skill | Skill | Skill" header style of proven ATS templates.
+  const tagline = skillsList.slice(0, 4).join(' | ');
+  if (tagline) lines.push(tagline);
 
   const contactLine = [profile.phone, profile.location, profile.email].filter(Boolean).join(' | ');
   if (contactLine) lines.push(contactLine);
@@ -127,44 +88,60 @@ function fallbackBuildResume({ jobDescription, profile }) {
 
   lines.push('');
 
-  lines.push('Professional Summary');
-  const topSkills = flatSkills.slice(0, 4).join(', ');
+  // SUMMARY always leads the resume — this is the section both ATS keyword
+  // scanners and human reviewers read first.
+  lines.push('SUMMARY');
+  const topSkills = skillsList.slice(0, 4).join(', ');
   lines.push(
-    `${profile.summary ||
-      `Professional with hands-on experience in ${topSkills || 'relevant technologies'}. ` +
-        `${topJDTerms.length ? `Skilled in ${topJDTerms.slice(0, 5).join(', ')}. ` : ''}` +
-        `Focused on delivering measurable results in fast-paced environments.`}`
+    `Motivated professional with hands-on experience in ${topSkills || 'relevant technologies'}. ` +
+      `${topJDTerms.length ? `Skilled in ${topJDTerms.slice(0, 5).join(', ')}, ` : ''}` +
+      `focused on delivering measurable results and driving impact in fast-paced environments.`
   );
   lines.push('');
 
-  if (skillGroups.length) {
-    lines.push('Technical Skills');
-    skillGroups.forEach((g) => lines.push(g));
+  if (skillsList.length) {
+    lines.push('SKILLS');
+    lines.push(skillsList.join(', '));
     lines.push('');
   }
 
+  // Experience and Projects are only ever included if the user actually
+  // provided them — never fabricated, even if that means the section is
+  // simply omitted. A resume claiming work or projects that didn't happen
+  // isn't a shortcut to getting shortlisted, it's misrepresentation.
   if (profile.experience) {
-    lines.push('Experience');
+    lines.push('EXPERIENCE');
     lines.push(reformatAsBullets(profile.experience));
     lines.push('');
   }
 
   if (profile.projects) {
-    lines.push('Projects');
+    lines.push('PROJECTS');
     lines.push(reformatAsBullets(profile.projects));
     lines.push('');
   }
 
   if (profile.certifications) {
-    lines.push('Certifications');
-    lines.push(reformatAsBullets(profile.certifications));
+    lines.push('CERTIFICATIONS');
+    lines.push(profile.certifications);
     lines.push('');
   }
 
   if (profile.education) {
-    lines.push('Education');
+    lines.push('EDUCATION');
     lines.push(profile.education);
     lines.push('');
+  }
+
+  if (profile.achievements) {
+    lines.push('ACHIEVEMENTS');
+    lines.push(reformatAsBullets(profile.achievements));
+    lines.push('');
+  }
+
+  if (profile.languages) {
+    lines.push('LANGUAGES');
+    lines.push(profile.languages);
   }
 
   return lines.join('\n').trim();
