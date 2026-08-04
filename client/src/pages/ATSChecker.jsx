@@ -15,15 +15,8 @@ import { saveActivity, ACTIVITY_TYPES, timeAgo } from '../utils/recentActivity.j
 
 const HEATMAP_COLOR = { green: 'bg-emerald-500', yellow: 'bg-amber-500', red: 'bg-rose-500' };
 const BREAKDOWN_LABELS = {
-  keywordMatch: 'Keyword Match',
-  skillsMatch: 'Skills Match',
-  experience: 'Experience',
-  projects: 'Projects',
-  formatting: 'Formatting',
-  grammar: 'Grammar',
-  education: 'Education',
-  achievements: 'Achievements',
-  actionVerbs: 'Action Verbs',
+  keywordMatch: 'Keyword Match', skillsMatch: 'Skills Match', experience: 'Experience',
+  projects: 'Projects', education: 'Education', formatting: 'Formatting', grammar: 'Grammar',
 };
 
 export default function ATSChecker() {
@@ -134,12 +127,19 @@ export default function ATSChecker() {
           )}
           <Card className="grid md:grid-cols-2 gap-8 items-center">
             <div className="flex justify-center">
-              <CircularProgress value={result.overallScore} size={160} strokeWidth={12} label={`Quality: ${result.quality}`} />
+              <CircularProgress value={result.overallScore ?? 0} size={160} strokeWidth={12} label={`Quality: ${result.quality || 'N/A'}`} />
             </div>
             <div className="space-y-4">
-              {Object.entries(result.breakdown).map(([key, val]) => (
-                <ProgressBar key={key} label={`${BREAKDOWN_LABELS[key]} (${val.weight}%)`} value={val.score} />
-              ))}
+              {result.breakdown ? (
+                Object.entries(result.breakdown).map(([key, val]) => (
+                  <ProgressBar key={key} label={`${BREAKDOWN_LABELS[key] || key} (${val.weight}%)`} value={val.score} />
+                ))
+              ) : (
+                <p className="text-sm text-slate-400">
+                  Score breakdown isn't available in this response — your backend may be running an older version. Try
+                  restarting the backend or pulling the latest code.
+                </p>
+              )}
             </div>
           </Card>
 
@@ -147,7 +147,7 @@ export default function ATSChecker() {
             <Card>
               <h3 className="font-semibold mb-3">Matched Keywords</h3>
               <div className="flex flex-wrap gap-2">
-                {result.keywordAnalysis.matched.length ? (
+                {result.keywordAnalysis?.matched?.length ? (
                   result.keywordAnalysis.matched.map((k) => <Chip key={k} variant="green">{k}</Chip>)
                 ) : (
                   <p className="text-sm text-slate-400">No JD provided or no matches found.</p>
@@ -157,7 +157,7 @@ export default function ATSChecker() {
             <Card>
               <h3 className="font-semibold mb-3">Missing Keywords</h3>
               <div className="flex flex-wrap gap-2">
-                {result.keywordAnalysis.missing.length ? (
+                {result.keywordAnalysis?.missing?.length ? (
                   result.keywordAnalysis.missing.map((k) => <Chip key={k} variant="red">{k}</Chip>)
                 ) : (
                   <p className="text-sm text-slate-400">Great — no missing keywords detected.</p>
@@ -166,50 +166,54 @@ export default function ATSChecker() {
             </Card>
           </div>
 
-          <Card>
-            <h3 className="font-semibold mb-4">Resume Section Heatmap</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {Object.entries(result.heatmap).map(([section, status]) => (
-                <div key={section} className="text-center">
-                  <div className={`w-full h-2.5 rounded-full mb-2 ${HEATMAP_COLOR[status]}`} />
-                  <span className="text-xs capitalize text-slate-500">{section}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
+          {result.heatmap && (
+            <Card>
+              <h3 className="font-semibold mb-4">Resume Section Heatmap</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {Object.entries(result.heatmap).map(([section, status]) => (
+                  <div key={section} className="text-center">
+                    <div className={`w-full h-2.5 rounded-full mb-2 ${HEATMAP_COLOR[status] || 'bg-slate-300'}`} />
+                    <span className="text-xs capitalize text-slate-500">{section}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <div className="grid md:grid-cols-2 gap-6">
             <Card>
               <h3 className="font-semibold mb-3">Action Verb Analysis</h3>
               <p className="text-xs text-slate-400 mb-2">Strong verbs found</p>
               <div className="flex flex-wrap gap-2 mb-4">
-                {result.actionVerbs.strong.length ? result.actionVerbs.strong.map((v) => <Chip key={v} variant="green">{v}</Chip>) : <span className="text-sm text-slate-400">None detected</span>}
+                {result.actionVerbs?.strong?.length ? result.actionVerbs.strong.map((v) => <Chip key={v} variant="green">{v}</Chip>) : <span className="text-sm text-slate-400">None detected</span>}
               </div>
               <p className="text-xs text-slate-400 mb-2">Weak phrases to replace</p>
               <div className="flex flex-wrap gap-2">
-                {result.actionVerbs.weak.length ? result.actionVerbs.weak.map((v) => <Chip key={v} variant="red">{v}</Chip>) : <span className="text-sm text-slate-400">None detected</span>}
+                {result.actionVerbs?.weak?.length ? result.actionVerbs.weak.map((v) => <Chip key={v} variant="red">{v}</Chip>) : <span className="text-sm text-slate-400">None detected</span>}
               </div>
             </Card>
             <Card>
               <h3 className="font-semibold mb-3">Grammar & Formatting</h3>
-              <p className="text-sm mb-2">Readability Score: <strong>{result.readabilityScore}/100</strong></p>
+              <p className="text-sm mb-2">Readability Score: <strong>{result.readabilityScore ?? 'N/A'}/100</strong></p>
               <ul className="text-sm text-slate-500 list-disc list-inside space-y-1">
-                {result.formattingIssues.length ? result.formattingIssues.map((i, idx) => <li key={idx}>{i}</li>) : <li>No major formatting issues found.</li>}
+                {result.formattingIssues?.length ? result.formattingIssues.map((i, idx) => <li key={idx}>{i}</li>) : <li>No major formatting issues found.</li>}
               </ul>
             </Card>
           </div>
 
-          <Card>
-            <h3 className="font-semibold mb-4">Top Improvements</h3>
-            <div className="space-y-3">
-              {result.topImprovements.map((imp, idx) => (
-                <div key={idx} className="flex items-start gap-3">
-                  <Chip variant={imp.impact === 'High' ? 'red' : imp.impact === 'Medium' ? 'brand' : 'neutral'}>{imp.impact}</Chip>
-                  <p className="text-sm text-slate-600 dark:text-slate-300"><strong>{imp.area}:</strong> {imp.suggestion}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
+          {result.topImprovements?.length > 0 && (
+            <Card>
+              <h3 className="font-semibold mb-4">Top Improvements</h3>
+              <div className="space-y-3">
+                {result.topImprovements.map((imp, idx) => (
+                  <div key={idx} className="flex items-start gap-3">
+                    <Chip variant={imp.impact === 'High' ? 'red' : imp.impact === 'Medium' ? 'brand' : 'neutral'}>{imp.impact}</Chip>
+                    <p className="text-sm text-slate-600 dark:text-slate-300"><strong>{imp.area}:</strong> {imp.suggestion}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       )}
     </div>
