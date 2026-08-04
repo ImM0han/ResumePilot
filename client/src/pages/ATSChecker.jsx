@@ -15,9 +15,15 @@ import { saveActivity, ACTIVITY_TYPES, timeAgo } from '../utils/recentActivity.j
 
 const HEATMAP_COLOR = { green: 'bg-emerald-500', yellow: 'bg-amber-500', red: 'bg-rose-500' };
 const BREAKDOWN_LABELS = {
-  keywordMatch: 'Keyword Match', skillsMatch: 'Skills Match', experience: 'Experience',
-  projects: 'Projects', formatting: 'Formatting', grammar: 'Grammar', education: 'Education',
-  achievements: 'Achievements', actionVerbs: 'Action Verbs',
+  keywordMatch: 'Keyword Match',
+  skillsMatch: 'Skills Match',
+  experience: 'Experience',
+  projects: 'Projects',
+  formatting: 'Formatting',
+  grammar: 'Grammar',
+  education: 'Education',
+  achievements: 'Achievements',
+  actionVerbs: 'Action Verbs',
 };
 
 export default function ATSChecker() {
