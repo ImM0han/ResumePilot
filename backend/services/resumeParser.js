@@ -33,11 +33,58 @@ async function extractTextFromFile(buffer, originalName = '') {
 }
 
 function cleanExtractedText(text = '') {
-  return text
+  let cleaned = text
     .replace(/\r\n/g, '\n')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+    .replace(/[ \t]+\n/g, '\n');
+
+  cleaned = mergeBulletMarkerLines(cleaned);
+  cleaned = fixGluedNumbers(cleaned);
+
+  return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Some PDF exports place the bullet glyph (•, -, *, etc.) on its own line,
+ * separate from the bullet's actual text on the next line — this is a very
+ * common layout artifact (bullet glyph and text are separate objects in the
+ * PDF's internal structure). Left alone, every downstream bullet-based check
+ * (quantification, action verbs, bullet count) silently operates on empty
+ * "•" bullets instead of the real content, badly understating the score.
+ */
+function mergeBulletMarkerLines(text) {
+  const lines = text.split('\n');
+  const merged = [];
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (/^[•\-*▪‣◦]$/.test(trimmed) && i + 1 < lines.length && lines[i + 1].trim()) {
+      merged.push(`${trimmed} ${lines[i + 1].trim()}`);
+      i += 1; // skip the next line, its content was just consumed
+    } else {
+      merged.push(lines[i]);
+    }
+  }
+  return merged.join('\n');
+}
+
+/**
+ * PDF extraction sometimes drops the space between adjacent text runs that
+ * are positioned right next to each other in the layout but are separate
+ * objects internally — most commonly a CGPA/score immediately followed by a
+ * graduation year, e.g. "7.812023" instead of "7.81 2023". Left unfixed,
+ * this breaks year/date detection used for education & experience scoring.
+ * Deliberately narrow (only decimal-number-immediately-followed-by-a-year)
+ * so it can't accidentally insert spaces into legitimate text elsewhere.
+ */
+function fixGluedNumbers(text) {
+  return text.replace(/(\d+\.\d+)((?:19|20)\d{2})/g, '$1 $2');
+}
+
+/** Rough "is this actually a job description, or just noise/a stray word" check. */
+function hasMeaningfulContent(text = '') {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return false;
+  const wordCount = (trimmed.match(/\S+/g) || []).length;
+  return trimmed.length >= 30 && wordCount >= 6;
 }
 
 /**
@@ -62,4 +109,4 @@ function detectSections(text = '') {
   return found;
 }
 
-module.exports = { extractTextFromFile, detectSections, cleanExtractedText };
+module.exports = { extractTextFromFile, detectSections, cleanExtractedText, hasMeaningfulContent };

@@ -11,8 +11,6 @@ const STOP_WORDS = new Set([
 const WEAK_VERBS = [
   'worked', 'helped', 'made', 'did', 'responsible for', 'tasked with', 'in charge of',
   'handled', 'dealt with', 'was involved in', 'participated in', 'assisted with',
-  'was given', 'was assigned to', 'duties included', 'responsibilities included',
-  'attempted to', 'strived to', 'assisted'
 ];
 
 const STRONG_ACTION_VERBS = [
@@ -21,8 +19,6 @@ const STRONG_ACTION_VERBS = [
   'automated', 'spearheaded', 'orchestrated', 'accelerated', 'transformed', 'pioneered',
   'executed', 'drove', 'scaled', 'migrated', 'deployed', 'mentored', 'negotiated',
   'analyzed', 'established', 'restructured', 'generated', 'achieved', 'exceeded',
-  'integrated', 'refactored', 'consolidated', 'modernized', 'stabilized', 'revamped',
-  'conceptualized', 'formulated', 'maximized', 'standardized', 'diagnosed', 'expedited'
 ];
 
 const BUZZWORDS = [
@@ -68,7 +64,7 @@ function estimateReadability(text = '') {
   return Math.round(score);
 }
 
-function findRepeatedWords(text = '', minCount = 5) {
+function findRepeatedWords(text = '', minCount = 12) {
   const tokens = tokenize(text);
   const freq = {};
   tokens.forEach((t) => {
@@ -106,17 +102,24 @@ function basicGrammarIssues(text = '') {
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    // Double spaces
-    if (/ {2,}/.test(trimmed)) issues.push({ line: idx + 1, issue: 'Multiple consecutive spaces found.' });
-
-    // Sentence starting lowercase (excluding bullet fragments starting with lowercase verbs is common in resumes, so only flag full sentences)
-    if (/^[a-z]/.test(trimmed) && trimmed.length > 40) {
-      issues.push({ line: idx + 1, issue: 'Line starts with a lowercase letter.' });
+    // Double spaces — but skip header-style lines using "|" as a separator,
+    // since "phone |  location |  email" style double-spacing there is
+    // harmless formatting, not a writing error.
+    if (/ {2,}/.test(trimmed) && !trimmed.includes('|')) {
+      issues.push({ line: idx + 1, issue: 'Multiple consecutive spaces found.' });
     }
 
-    // Missing punctuation on long bullet-like lines
-    if (trimmed.length > 60 && !/[.!?]$/.test(trimmed) && !/:$/.test(trimmed)) {
-      // resumes often skip periods on bullets intentionally; treat as minor, not counted here
+    // A line starting lowercase is only a real issue if it's actually the
+    // start of a new sentence (i.e. the previous line ended with sentence
+    // punctuation). Dense paragraph text extracted from a PDF wraps
+    // mid-sentence onto new lines constantly ("...Strong understanding\nof
+    // the Software Testing...") — that's normal word-wrap, not a mistake.
+    if (/^[a-z]/.test(trimmed) && trimmed.length > 40) {
+      const prevLine = idx > 0 ? lines[idx - 1].trim() : '';
+      const prevEndsSentence = /[.!?]$/.test(prevLine) || prevLine === '';
+      if (prevEndsSentence) {
+        issues.push({ line: idx + 1, issue: 'Line starts with a lowercase letter.' });
+      }
     }
 
     // Repeated word e.g. "the the"

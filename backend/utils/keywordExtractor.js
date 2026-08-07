@@ -1,1118 +1,299 @@
 const { normalize, tokenize } = require('./textUtils');
 
-/*
- * ============================================================
- * ResumePilot ATS Keyword Engine
- * ============================================================
- *
- * Important design rule:
- *
- *     "React", "React.js", "ReactJS"
- *              ↓
- *           react
- *
- *     "Machine Learning", "ML"
- *              ↓
- *        machine_learning
- *
- * Every skill has ONE canonical ID.
- *
- * This prevents aliases from being counted as different skills
- * and makes the ATS score deterministic.
- * ============================================================
+// Curated dictionary of known technical & soft skill terms.
+// This lets us extract meaningful keywords deterministically (no AI required),
+// while multi-word terms are matched as phrases.
+const KNOWN_SKILLS = [
+  // Languages
+  'javascript', 'typescript', 'python', 'java', 'c++', 'c#', 'go', 'golang', 'rust', 'php',
+  'ruby', 'kotlin', 'swift', 'scala', 'r', 'matlab', 'sql', 'html', 'css', 'bash', 'shell',
+  // Frontend
+  'react', 'react.js', 'redux', 'vue', 'vue.js', 'angular', 'next.js', 'nextjs', 'nuxt',
+  'svelte', 'tailwind', 'tailwind css', 'bootstrap', 'sass', 'webpack', 'vite', 'framer motion',
+  // Backend
+  'node.js', 'nodejs', 'express', 'express.js', 'django', 'flask', 'fastapi', 'spring',
+  'spring boot', '.net', 'asp.net', 'laravel', 'ruby on rails', 'graphql', 'rest api', 'grpc',
+  // Databases
+  'mongodb', 'postgresql', 'postgres', 'mysql', 'sqlite', 'redis', 'elasticsearch', 'dynamodb',
+  'firebase', 'cassandra', 'oracle', 'mariadb', 'supabase',
+  // Cloud / DevOps
+  'aws', 'azure', 'gcp', 'google cloud', 'docker', 'kubernetes', 'terraform', 'jenkins',
+  'ci/cd', 'github actions', 'gitlab ci', 'ansible', 'nginx', 'linux', 'cloudformation',
+  // Data / AI
+  'machine learning', 'deep learning', 'tensorflow', 'pytorch', 'keras', 'scikit-learn',
+  'pandas', 'numpy', 'nlp', 'computer vision', 'data science', 'data analysis', 'openai',
+  'llm', 'generative ai', 'artificial intelligence', 'power bi', 'tableau', 'excel',
+  // Tools
+  'git', 'github', 'jira', 'confluence', 'figma', 'postman', 'slack', 'notion', 'agile',
+  'scrum', 'kanban', 'microservices', 'api development', 'unit testing', 'jest', 'cypress',
+  'selenium', 'ci', 'cd',
+  // QA / Software Testing
+  'quality assurance', 'manual testing', 'automation testing', 'functional testing',
+  'regression testing', 'integration testing', 'ui testing', 'exploratory testing',
+  'smoke testing', 'sanity testing', 'uat', 'user acceptance testing', 'stlc', 'sdlc',
+  'test case design', 'test scenarios', 'test plan', 'defect life cycle', 'bug tracking',
+  'bugzilla', 'trello', 'testrail', 'api testing', 'cross-browser testing', 'test automation',
+  'black box testing', 'white box testing', 'load testing', 'performance testing',
+  // Soft skills
+  'communication', 'leadership', 'teamwork', 'problem solving', 'problem-solving',
+  'collaboration', 'time management', 'critical thinking', 'adaptability', 'creativity',
+  'project management', 'stakeholder management', 'mentoring', 'analytical skills',
+  'attention to detail', 'decision making', 'conflict resolution', 'presentation skills',
+];
+
+// Sort longest-first so multi-word phrases are matched before their sub-words
+const SORTED_SKILLS = [...KNOWN_SKILLS].sort((a, b) => b.length - a.length);
+
+/**
+ * Builds a boundary-aware regex for a term. Unlike naive " term " space
+ * padding, this treats ANY non-compound-token character (/, comma, parens,
+ * &, colon, etc.) as a valid boundary — not just literal whitespace. Without
+ * this, a JD phrase like "Agile/Scrum" would never match the individual
+ * skills "agile" or "scrum" at all, since there's no whitespace around them,
+ * silently dropping real, clearly-stated requirements from every score.
  */
-
-const SKILL_GROUPS = {
-    javascript: [
-        'javascript',
-        'js',
-        'ecmascript',
-    ],
-
-    typescript: [
-        'typescript',
-        'ts',
-    ],
-
-    python: [
-        'python',
-    ],
-
-    java: [
-        'java',
-    ],
-
-    cpp: [
-        'c++',
-        'cpp',
-    ],
-
-    csharp: [
-        'c#',
-        'c sharp',
-        'csharp',
-    ],
-
-    go: [
-        'golang',
-        'go language',
-    ],
-
-    rust: [
-        'rust',
-    ],
-
-    php: [
-        'php',
-    ],
-
-    ruby: [
-        'ruby',
-    ],
-
-    kotlin: [
-        'kotlin',
-    ],
-
-    swift: [
-        'swift',
-    ],
-
-    sql: [
-        'sql',
-    ],
-
-    html: [
-        'html',
-        'html5',
-    ],
-
-    css: [
-        'css',
-        'css3',
-    ],
-
-    bash: [
-        'bash',
-        'shell scripting',
-        'shell script',
-    ],
-
-    react: [
-        'react',
-        'react.js',
-        'reactjs',
-    ],
-
-    redux: [
-        'redux',
-    ],
-
-    vue: [
-        'vue',
-        'vue.js',
-        'vuejs',
-    ],
-
-    angular: [
-        'angular',
-        'angular.js',
-        'angularjs',
-    ],
-
-    nextjs: [
-        'next.js',
-        'nextjs',
-        'next js',
-    ],
-
-    tailwind: [
-        'tailwind',
-        'tailwind css',
-        'tailwindcss',
-    ],
-
-    bootstrap: [
-        'bootstrap',
-    ],
-
-    vite: [
-        'vite',
-    ],
-
-    webpack: [
-        'webpack',
-    ],
-
-    nodejs: [
-        'node',
-        'node.js',
-        'nodejs',
-    ],
-
-    express: [
-        'express',
-        'express.js',
-        'expressjs',
-    ],
-
-    django: [
-        'django',
-    ],
-
-    flask: [
-        'flask',
-    ],
-
-    fastapi: [
-        'fastapi',
-        'fast api',
-    ],
-
-    spring: [
-        'spring',
-    ],
-
-    spring_boot: [
-        'spring boot',
-        'springboot',
-    ],
-
-    dotnet: [
-        '.net',
-        'dotnet',
-        'asp.net',
-        'aspnet',
-    ],
-
-    laravel: [
-        'laravel',
-    ],
-
-    graphql: [
-        'graphql',
-    ],
-
-    rest_api: [
-        'rest api',
-        'restful api',
-        'rest apis',
-        'restful apis',
-    ],
-
-    grpc: [
-        'grpc',
-    ],
-
-    mongodb: [
-        'mongodb',
-        'mongo db',
-        'mongo',
-    ],
-
-    postgresql: [
-        'postgresql',
-        'postgres',
-        'postgres db',
-    ],
-
-    mysql: [
-        'mysql',
-    ],
-
-    sqlite: [
-        'sqlite',
-    ],
-
-    redis: [
-        'redis',
-    ],
-
-    elasticsearch: [
-        'elasticsearch',
-        'elastic search',
-    ],
-
-    dynamodb: [
-        'dynamodb',
-        'dynamo db',
-    ],
-
-    firebase: [
-        'firebase',
-    ],
-
-    cassandra: [
-        'cassandra',
-    ],
-
-    oracle: [
-        'oracle database',
-        'oracle db',
-        'oracle',
-    ],
-
-    mariadb: [
-        'mariadb',
-    ],
-
-    supabase: [
-        'supabase',
-    ],
-
-    aws: [
-        'aws',
-        'amazon web services',
-        'amazon aws',
-    ],
-
-    azure: [
-        'azure',
-        'microsoft azure',
-    ],
-
-    gcp: [
-        'gcp',
-        'google cloud',
-        'google cloud platform',
-    ],
-
-    docker: [
-        'docker',
-        'docker containers',
-        'containerization',
-    ],
-
-    kubernetes: [
-        'kubernetes',
-        'k8s',
-    ],
-
-    terraform: [
-        'terraform',
-    ],
-
-    jenkins: [
-        'jenkins',
-    ],
-
-    github_actions: [
-        'github actions',
-    ],
-
-    gitlab_ci: [
-        'gitlab ci',
-        'gitlab-ci',
-    ],
-
-    ansible: [
-        'ansible',
-    ],
-
-    nginx: [
-        'nginx',
-    ],
-
-    linux: [
-        'linux',
-    ],
-
-    cicd: [
-        'ci/cd',
-        'ci cd',
-        'continuous integration',
-        'continuous delivery',
-        'continuous deployment',
-    ],
-
-    git: [
-        'git',
-        'git scm',
-    ],
-
-    github: [
-        'github',
-    ],
-
-    jira: [
-        'jira',
-    ],
-
-    postman: [
-        'postman',
-    ],
-
-    agile: [
-        'agile',
-    ],
-
-    scrum: [
-        'scrum',
-    ],
-
-    microservices: [
-        'microservices',
-        'microservices architecture',
-    ],
-
-    unit_testing: [
-        'unit testing',
-        'unit tests',
-        'unit test',
-    ],
-
-    jest: [
-        'jest',
-    ],
-
-    cypress: [
-        'cypress',
-    ],
-
-    selenium: [
-        'selenium',
-    ],
-
-    machine_learning: [
-        'machine learning',
-        'machine-learning',
-        'ml',
-    ],
-
-    deep_learning: [
-        'deep learning',
-        'deep-learning',
-        'dl',
-    ],
-
-    tensorflow: [
-        'tensorflow',
-    ],
-
-    pytorch: [
-        'pytorch',
-    ],
-
-    keras: [
-        'keras',
-    ],
-
-    scikit_learn: [
-        'scikit-learn',
-        'scikit learn',
-        'sklearn',
-    ],
-
-    pandas: [
-        'pandas',
-    ],
-
-    numpy: [
-        'numpy',
-    ],
-
-    nlp: [
-        'nlp',
-        'natural language processing',
-    ],
-
-    computer_vision: [
-        'computer vision',
-        'cv',
-    ],
-
-    data_science: [
-        'data science',
-        'data scientist',
-    ],
-
-    data_analysis: [
-        'data analysis',
-        'data analytics',
-        'data analyst',
-    ],
-
-    openai: [
-        'openai',
-    ],
-
-    llm: [
-        'llm',
-        'large language model',
-        'large language models',
-    ],
-
-    generative_ai: [
-        'generative ai',
-        'genai',
-        'gen ai',
-    ],
-
-    artificial_intelligence: [
-        'artificial intelligence',
-        'ai',
-    ],
-
-    power_bi: [
-        'power bi',
-        'powerbi',
-    ],
-
-    tableau: [
-        'tableau',
-    ],
-
-    excel: [
-        'excel',
-        'microsoft excel',
-    ],
-
-    communication: [
-        'communication',
-        'communication skills',
-    ],
-
-    leadership: [
-        'leadership',
-        'leadership skills',
-    ],
-
-    teamwork: [
-        'teamwork',
-        'team work',
-    ],
-
-    problem_solving: [
-        'problem solving',
-        'problem-solving',
-    ],
-
-    collaboration: [
-        'collaboration',
-        'collaborative',
-    ],
-
-    project_management: [
-        'project management',
-    ],
-
-    stakeholder_management: [
-        'stakeholder management',
-    ],
-
-    mentoring: [
-        'mentoring',
-        'mentorship',
-    ],
-
-    analytical_skills: [
-        'analytical skills',
-        'analytical thinking',
-    ],
-
-    attention_to_detail: [
-        'attention to detail',
-    ],
-};
-
-/*
- * Canonical display names.
- */
-const SKILL_LABELS = {
-    javascript: 'JavaScript',
-    typescript: 'TypeScript',
-    python: 'Python',
-    java: 'Java',
-    cpp: 'C++',
-    csharp: 'C#',
-    go: 'Go',
-    rust: 'Rust',
-    php: 'PHP',
-    ruby: 'Ruby',
-    kotlin: 'Kotlin',
-    swift: 'Swift',
-    sql: 'SQL',
-    html: 'HTML',
-    css: 'CSS',
-
-    react: 'React',
-    redux: 'Redux',
-    vue: 'Vue',
-    angular: 'Angular',
-    nextjs: 'Next.js',
-    tailwind: 'Tailwind CSS',
-    bootstrap: 'Bootstrap',
-    vite: 'Vite',
-    webpack: 'Webpack',
-
-    nodejs: 'Node.js',
-    express: 'Express.js',
-    django: 'Django',
-    flask: 'Flask',
-    fastapi: 'FastAPI',
-    spring: 'Spring',
-    spring_boot: 'Spring Boot',
-    dotnet: '.NET',
-    laravel: 'Laravel',
-    graphql: 'GraphQL',
-    rest_api: 'REST API',
-    grpc: 'gRPC',
-
-    mongodb: 'MongoDB',
-    postgresql: 'PostgreSQL',
-    mysql: 'MySQL',
-    sqlite: 'SQLite',
-    redis: 'Redis',
-    elasticsearch: 'Elasticsearch',
-    dynamodb: 'DynamoDB',
-    firebase: 'Firebase',
-    cassandra: 'Cassandra',
-    oracle: 'Oracle',
-    mariadb: 'MariaDB',
-    supabase: 'Supabase',
-
-    aws: 'AWS',
-    azure: 'Azure',
-    gcp: 'Google Cloud',
-    docker: 'Docker',
-    kubernetes: 'Kubernetes',
-    terraform: 'Terraform',
-    jenkins: 'Jenkins',
-    github_actions: 'GitHub Actions',
-    gitlab_ci: 'GitLab CI',
-    ansible: 'Ansible',
-    nginx: 'Nginx',
-    linux: 'Linux',
-    cicd: 'CI/CD',
-
-    git: 'Git',
-    github: 'GitHub',
-    jira: 'Jira',
-    postman: 'Postman',
-    agile: 'Agile',
-    scrum: 'Scrum',
-    microservices: 'Microservices',
-    unit_testing: 'Unit Testing',
-    jest: 'Jest',
-    cypress: 'Cypress',
-    selenium: 'Selenium',
-
-    machine_learning: 'Machine Learning',
-    deep_learning: 'Deep Learning',
-    tensorflow: 'TensorFlow',
-    pytorch: 'PyTorch',
-    keras: 'Keras',
-    scikit_learn: 'Scikit-learn',
-    pandas: 'Pandas',
-    numpy: 'NumPy',
-    nlp: 'NLP',
-    computer_vision: 'Computer Vision',
-    data_science: 'Data Science',
-    data_analysis: 'Data Analysis',
-    openai: 'OpenAI',
-    llm: 'LLM',
-    generative_ai: 'Generative AI',
-    artificial_intelligence: 'Artificial Intelligence',
-    power_bi: 'Power BI',
-    tableau: 'Tableau',
-    excel: 'Excel',
-
-    communication: 'Communication',
-    leadership: 'Leadership',
-    teamwork: 'Teamwork',
-    problem_solving: 'Problem Solving',
-    collaboration: 'Collaboration',
-    project_management: 'Project Management',
-    stakeholder_management: 'Stakeholder Management',
-    mentoring: 'Mentoring',
-    analytical_skills: 'Analytical Skills',
-    attention_to_detail: 'Attention to Detail',
-};
-
-/*
- * Build reverse alias lookup.
- */
-const ALIAS_TO_CANONICAL = {};
-
-Object.entries(SKILL_GROUPS).forEach(([canonical, aliases]) => {
-    aliases.forEach((alias) => {
-        ALIAS_TO_CANONICAL[alias] = canonical;
-    });
-});
-
-function normalizeForMatching(text = '') {
-    let value = String(text || '').toLowerCase();
-
-    value = value
-        .replace(/[•▪‣◦]/g, ' ')
-        .replace(/[–—−]/g, '-')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    return ` ${value} `;
+function buildBoundaryRegex(term, flags = '') {
+  const escaped = term.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![a-z0-9.+#-])${escaped}(?![a-z0-9.+#-])`, flags);
 }
 
-function containsAlias(text, alias) {
-    const normalized = normalizeForMatching(text);
-
-    const escaped = alias
-        .toLowerCase()
-        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        .replace(/\s+/g, '\\s+');
-
-    /*
-     * Word boundaries are intentionally avoided for some technologies
-     * because "." and "+" have special meanings.
-     */
-    return new RegExp(`(^|[^a-z0-9+#])${escaped}([^a-z0-9+#]|$)`, 'i')
-        .test(normalized);
-}
-
-/*
- * Return canonical skill IDs.
- */
-function extractCanonicalSkills(text = '') {
-    const found = new Set();
-
-    Object.entries(SKILL_GROUPS).forEach(([canonical, aliases]) => {
-        if (aliases.some((alias) => containsAlias(text, alias))) {
-            found.add(canonical);
-        }
-    });
-
-    return Array.from(found);
-}
-
-/*
- * Return display names instead of IDs.
- */
-function extractKnownSkills(text = '') {
-    return extractCanonicalSkills(text)
-        .map((id) => SKILL_LABELS[id] || id)
-        .sort();
-}
-
-/*
- * Count canonical skill occurrences.
- */
-function countSkillOccurrences(text = '') {
-    const counts = {};
-
-    Object.entries(SKILL_GROUPS).forEach(([canonical, aliases]) => {
-        let count = 0;
-
-        aliases.forEach((alias) => {
-            const normalized = normalizeForMatching(text);
-            const escaped = alias
-                .toLowerCase()
-                .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                .replace(/\s+/g, '\\s+');
-
-            const regex = new RegExp(
-                `(^|[^a-z0-9+#])${escaped}([^a-z0-9+#]|$)`,
-                'gi'
-            );
-
-            count += (normalized.match(regex) || []).length;
-        });
-
-        if (count > 0) {
-            counts[canonical] = count;
-        }
-    });
-
-    return counts;
-}
-
-/*
- * Common JD filler words.
- */
+// Generic words that show up constantly in job descriptions but carry no real
+// ATS keyword signal on their own. These are excluded from frequency-based
+// keyword extraction so the "missing keyword" list stays meaningful instead
+// of being padded with filler that makes the score look artificially high.
 const JD_BOILERPLATE = new Set([
-    'experience',
-    'experienced',
-    'role',
-    'roles',
-    'team',
-    'teams',
-    'work',
-    'working',
-    'worked',
-    'years',
-    'year',
-    'ability',
-    'able',
-    'strong',
-    'knowledge',
-    'including',
-    'environment',
-    'company',
-    'job',
-    'position',
-    'candidate',
-    'candidates',
-    'looking',
-    'skills',
-    'skill',
-    'required',
-    'requirements',
-    'requirement',
-    'preferred',
-    'responsibilities',
-    'responsibility',
-    'responsible',
-    'qualifications',
-    'qualification',
-    'plus',
-    'good',
-    'excellent',
-    'strongly',
-    'must',
-    'ideal',
-    'related',
-    'across',
-    'various',
-    'multiple',
-    'new',
-    'high',
-    'level',
-    'levels',
-    'help',
-    'helping',
-    'support',
-    'supporting',
-    'business',
-    'businesses',
-    'client',
-    'clients',
-    'people',
-    'individual',
-    'opportunity',
-    'opportunities',
-    'growing',
-    'growth',
-    'fast',
-    'paced',
-    'passion',
-    'passionate',
-    'benefits',
-    'salary',
-    'location',
-    'employment',
-    'apply',
-    'application',
-    'join',
-    'joining',
-    'love',
-    'like',
-    'want',
-    'wanted',
+  'experience', 'experienced', 'role', 'roles', 'team', 'teams', 'work', 'working', 'worked',
+  'years', 'year', 'ability', 'able', 'strong', 'knowledge', 'including', 'environment',
+  'company', 'job', 'position', 'candidate', 'candidates', 'looking', 'skills', 'skill',
+  'required', 'requirements', 'requirement', 'preferred', 'responsibilities', 'responsible',
+  'qualifications', 'qualification', 'plus', 'good', 'excellent', 'strongly', 'must', 'ideal',
+  'related', 'across', 'various', 'multiple', 'new', 'high', 'level', 'levels', 'day', 'days',
+  'help', 'helping', 'support', 'supporting', 'business', 'businesses', 'client', 'clients',
+  'someone', 'people', 'person', 'individual', 'opportunity', 'opportunities', 'growing',
+  'growth', 'fast', 'paced', 'passion', 'passionate', 'benefits', 'salary', 'location',
+  'employment', 'apply', 'application', 'join', 'joining', 'love', 'like', 'want', 'wanted',
 ]);
 
-function extractFrequentKeywords(text = '', limit = 15) {
-    const tokens = tokenize(text);
+/**
+ * Job descriptions very often list compound skills as a coordinated series
+ * sharing one suffix — "Functional, regression, and UI testing experience"
+ * clearly means functional testing AND regression testing AND UI testing,
+ * but none of those exact phrases appear as contiguous text, so naive
+ * substring matching misses all but the last one. This expands text so
+ * elided list items get their shared suffix reattached before skill
+ * extraction runs, without altering anything about the resume-matching side.
+ */
+function expandCoordinatedPhrases(text = '') {
+  const multiWordSkills = KNOWN_SKILLS.filter((s) => s.includes(' ') && !s.includes('/'));
+  let expanded = text;
 
-    const freq = {};
-
-    tokens.forEach((token) => {
-        const word = String(token).toLowerCase().trim();
-
-        if (word.length < 4) return;
-        if (/^\d+$/.test(word)) return;
-        if (JD_BOILERPLATE.has(word)) return;
-
-        freq[word] = (freq[word] || 0) + 1;
+  multiWordSkills.forEach((skill) => {
+    const words = skill.split(' ');
+    if (words.length !== 2) return; // keep this narrow and safe: two-word compounds only
+    const [first, suffix] = words;
+    // Matches "A, B, and C <suffix>" / "A, B and C <suffix>" style lists
+    // ending in this skill's own suffix, e.g. "functional, regression, and UI testing"
+    const listRegex = new RegExp(
+      `((?:[a-z0-9-]+,\\s*)+(?:and\\s+)?)${first}\\s+${suffix}\\b`,
+      'gi'
+    );
+    expanded = expanded.replace(listRegex, (match, leadItems) => {
+      const items = leadItems.split(',').map((s) => s.replace(/\band\b/i, '').trim()).filter(Boolean);
+      const rebuilt = items.map((item) => `${item} ${suffix}`).join(', ');
+      return `${rebuilt}, ${first} ${suffix}`;
     });
+  });
 
-    return Object.entries(freq)
-        .filter(([, count]) => count >= 2)
-        .sort((a, b) => {
-            if (b[1] !== a[1]) return b[1] - a[1];
-            return a[0].localeCompare(b[0]);
-        })
-        .slice(0, limit)
-        .map(([word, count]) => ({
-            word,
-            count,
-        }));
+  return expanded;
 }
 
-function extractFrequentPhrases(text = '', limit = 15) {
-    const tokens = tokenize(text)
-        .map((x) => String(x).toLowerCase())
-        .filter((x) => x.length >= 3);
+function extractKnownSkills(text = '') {
+  const normalized = normalize(expandCoordinatedPhrases(text));
+  const found = new Set();
 
-    const phrases = {};
-
-    for (let i = 0; i < tokens.length - 1; i++) {
-        const a = tokens[i];
-        const b = tokens[i + 1];
-
-        if (JD_BOILERPLATE.has(a) || JD_BOILERPLATE.has(b)) {
-            continue;
-        }
-
-        const phrase = `${a} ${b}`;
-        phrases[phrase] = (phrases[phrase] || 0) + 1;
+  SORTED_SKILLS.forEach((skill) => {
+    if (buildBoundaryRegex(skill).test(normalized)) {
+      found.add(skill);
     }
+  });
 
-    for (let i = 0; i < tokens.length - 2; i++) {
-        const a = tokens[i];
-        const b = tokens[i + 1];
-        const c = tokens[i + 2];
-
-        if (
-            JD_BOILERPLATE.has(a) ||
-            JD_BOILERPLATE.has(b) ||
-            JD_BOILERPLATE.has(c)
-        ) {
-            continue;
-        }
-
-        const phrase = `${a} ${b} ${c}`;
-        phrases[phrase] = (phrases[phrase] || 0) + 1;
-    }
-
-    return Object.entries(phrases)
-        .filter(([, count]) => count >= 2)
-        .sort((a, b) => {
-            if (b[1] !== a[1]) return b[1] - a[1];
-            return a[0].localeCompare(b[0]);
-        })
-        .slice(0, limit)
-        .map(([phrase]) => phrase);
+  return Array.from(found);
 }
 
+/** Counts how many times each curated skill appears (repetition = importance signal). */
+function countSkillOccurrences(text = '') {
+  const normalized = normalize(text);
+  const counts = {};
+  SORTED_SKILLS.forEach((skill) => {
+    const matches = normalized.match(buildBoundaryRegex(skill, 'g'));
+    if (matches) counts[skill] = matches.length;
+  });
+  return counts;
+}
+
+// Extract "significant" keywords beyond the curated list using frequency,
+// filtered against the expanded boilerplate list so noise doesn't inflate scores.
+function extractFrequentKeywords(text = '', limit = 20) {
+  const tokens = tokenize(text);
+  const freq = {};
+  tokens.forEach((t) => {
+    if (t.length < 4) return;
+    if (/^\d+$/.test(t)) return; // skip pure numbers
+    if (JD_BOILERPLATE.has(t)) return;
+    freq[t] = (freq[t] || 0) + 1;
+  });
+
+  return Object.entries(freq)
+    .filter(([, count]) => count >= 2) // require repetition to count as a real signal
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([word, count]) => ({ word, count }));
+}
+
+/**
+ * Attempts to locate a "nice to have / preferred / bonus" section within the
+ * JD text. Skills mentioned ONLY there are downgraded to secondary — anything
+ * else is treated as critical by default, since most real job descriptions
+ * list their actual requirements as plain bullets without ever using the
+ * literal word "Requirements:".
+ */
 function extractPreferredSection(jdText = '') {
-    const headerRegex =
-        /(nice[-\s]?to[-\s]?have|preferred|bonus|good[-\s]?to[-\s]?have|a plus|strongly preferred|is a plus)\s*:?/i;
+  const headerRegex = /(nice[-\s]?to[-\s]?have|preferred(?! qualifications)|bonus|good[-\s]?to[-\s]?have|a plus|strongly preferred|is a plus)\s*:?/i;
+  const stopRegex = /(requirements?|must[-\s]?have|responsibilit|about (the )?company|benefits|perks|what we offer|compensation|salary|minimum qualifications?)\s*:?/i;
 
-    const stopRegex =
-        /(requirements?|must[-\s]?have|responsibilit|about (the )?company|benefits|perks|what we offer|compensation|salary|minimum qualifications?)\s*:?/i;
+  const lines = jdText.split('\n');
+  let capturing = false;
+  const captured = [];
 
-    const lines = String(jdText || '').split('\n');
-
-    let capturing = false;
-    const captured = [];
-
-    for (const line of lines) {
-        if (!capturing) {
-            const match = line.match(headerRegex);
-
-            if (match) {
-                capturing = true;
-
-                const afterHeader = line
-                    .slice(match.index + match[0].length)
-                    .trim();
-
-                if (afterHeader) {
-                    captured.push(afterHeader);
-                }
-            }
-
-            continue;
-        }
-
-        if (stopRegex.test(line)) {
-            capturing = false;
-            continue;
-        }
-
-        captured.push(line);
+  for (const line of lines) {
+    if (!capturing) {
+      const match = line.match(headerRegex);
+      if (match) {
+        capturing = true;
+        // Common JD style: "Nice to have: GraphQL, TypeScript, Terraform." —
+        // header and content share one line, so capture what follows the colon too.
+        const afterHeader = line.slice(match.index + match[0].length);
+        if (afterHeader.trim()) captured.push(afterHeader);
+      }
+      continue;
     }
+    if (stopRegex.test(line)) {
+      capturing = false;
+      continue;
+    }
+    captured.push(line);
+  }
 
-    return captured.join('\n');
+  return captured.join('\n');
 }
 
+/**
+ * Builds a weighted keyword profile from a job description:
+ * - `critical`  — every recognized skill/keyword, UNLESS it only appears inside
+ *                 an explicit "nice to have / preferred / bonus" section
+ * - `secondary` — nice-to-have-only skills, plus generic frequent terms
+ * Critical keywords count double toward the match score, since missing a
+ * genuine requirement is a much bigger ATS/recruiter red flag than missing
+ * something explicitly framed as optional.
+ */
 function extractJDKeywords(jdText = '') {
-    if (!jdText || !jdText.trim()) {
-        return {
-            critical: [],
-            secondary: [],
-            all: [],
-            criticalIds: [],
-            secondaryIds: [],
-        };
+  if (!jdText || !jdText.trim()) {
+    return { critical: [], secondary: [], all: [] };
+  }
+
+  const allSkills = extractKnownSkills(jdText);
+  const totalOccurrences = countSkillOccurrences(jdText);
+  const preferredText = extractPreferredSection(jdText);
+  const preferredOccurrences = countSkillOccurrences(preferredText);
+
+  const critical = new Set();
+  const secondary = new Set();
+
+  allSkills.forEach((skill) => {
+    const total = totalOccurrences[skill] || 0;
+    const withinPreferred = preferredOccurrences[skill] || 0;
+    // If the skill is mentioned anywhere OUTSIDE the nice-to-have section,
+    // it's a genuine requirement. Only downgrade it when every mention of
+    // it lives inside the nice-to-have block.
+    if (withinPreferred > 0 && withinPreferred >= total) {
+      secondary.add(skill);
+    } else {
+      critical.add(skill);
     }
+  });
 
-    const allSkillIds = extractCanonicalSkills(jdText);
+  // Frequency-derived generic keywords are treated as secondary signals only —
+  // they're a useful hint but too noisy to be scored as "must-have".
+  extractFrequentKeywords(jdText, 15).forEach(({ word }) => {
+    if (!critical.has(word) && !secondary.has(word)) secondary.add(word);
+  });
 
-    const totalOccurrences = countSkillOccurrences(jdText);
-
-    const preferredText = extractPreferredSection(jdText);
-    const preferredOccurrences = countSkillOccurrences(preferredText);
-
-    const criticalIds = [];
-    const secondaryIds = [];
-
-    allSkillIds.forEach((id) => {
-        const total = totalOccurrences[id] || 0;
-        const preferred = preferredOccurrences[id] || 0;
-
-        if (preferred > 0 && preferred >= total) {
-            secondaryIds.push(id);
-        } else {
-            criticalIds.push(id);
-        }
-    });
-
-    const critical = criticalIds.map(
-        (id) => SKILL_LABELS[id] || id
-    );
-
-    const secondary = secondaryIds.map(
-        (id) => SKILL_LABELS[id] || id
-    );
-
-    /*
-     * Generic frequent words are only secondary.
-     * They NEVER become critical skills.
-     */
-    extractFrequentKeywords(jdText, 10).forEach(({ word }) => {
-        const alreadyKnown = [...critical, ...secondary]
-            .some((x) => x.toLowerCase() === word.toLowerCase());
-
-        if (!alreadyKnown) {
-            secondary.push(word);
-        }
-    });
-
-    return {
-        critical,
-        secondary,
-        all: [...new Set([...critical, ...secondary])],
-        criticalIds,
-        secondaryIds,
-    };
+  return {
+    critical: Array.from(critical),
+    secondary: Array.from(secondary),
+    all: Array.from(new Set([...critical, ...secondary])),
+  };
 }
 
+/**
+ * Compares a weighted JD keyword profile against resume text.
+ * Returns matched/missing for both tiers plus a 0-100 score where critical
+ * keywords are weighted twice as heavily as secondary ones.
+ */
 function analyzeKeywordMatch(jdKeywords, resumeText = '') {
-    const resumeSkillIds = new Set(
-        extractCanonicalSkills(resumeText)
-    );
+  const normalizedResume = normalize(resumeText);
 
-    const criticalIds = jdKeywords.criticalIds || [];
-    const secondaryIds = jdKeywords.secondaryIds || [];
+  const isPresent = (kw) => buildBoundaryRegex(kw).test(normalizedResume);
 
-    const matchedCriticalIds = criticalIds.filter((id) =>
-        resumeSkillIds.has(id)
-    );
+  const critical = jdKeywords.critical || [];
+  const secondary = jdKeywords.secondary || [];
 
-    const missingCriticalIds = criticalIds.filter(
-        (id) => !resumeSkillIds.has(id)
-    );
+  const matchedCritical = critical.filter(isPresent);
+  const missingCritical = critical.filter((k) => !isPresent(k));
+  const matchedSecondary = secondary.filter(isPresent);
+  const missingSecondary = secondary.filter((k) => !isPresent(k));
 
-    const matchedSecondaryIds = secondaryIds.filter((id) =>
-        resumeSkillIds.has(id)
-    );
+  const criticalWeight = 2;
+  const secondaryWeight = 1;
+  const totalWeight = critical.length * criticalWeight + secondary.length * secondaryWeight;
+  const earnedWeight = matchedCritical.length * criticalWeight + matchedSecondary.length * secondaryWeight;
 
-    const missingSecondaryIds = secondaryIds.filter(
-        (id) => !resumeSkillIds.has(id)
-    );
+  const score = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 60; // neutral baseline if no JD signal at all
 
-    /*
-     * Critical requirements are worth 3x.
-     * Preferred requirements are worth 1x.
-     */
-    const criticalWeight = 3;
-    const secondaryWeight = 1;
-
-    const totalWeight =
-        criticalIds.length * criticalWeight +
-        secondaryIds.length * secondaryWeight;
-
-    const earnedWeight =
-        matchedCriticalIds.length * criticalWeight +
-        matchedSecondaryIds.length * secondaryWeight;
-
-    const score =
-        totalWeight > 0 ?
-        Math.round((earnedWeight / totalWeight) * 100) :
-        0;
-
-    const toLabel = (id) => SKILL_LABELS[id] || id;
-
-    return {
-        score,
-
-        matchedCritical: matchedCriticalIds.map(toLabel),
-        missingCritical: missingCriticalIds.map(toLabel),
-
-        matchedSecondary: matchedSecondaryIds.map(toLabel),
-        missingSecondary: missingSecondaryIds.map(toLabel),
-
-        matched: [
-            ...matchedCriticalIds.map(toLabel),
-            ...matchedSecondaryIds.map(toLabel),
-        ],
-
-        missing: [
-            ...missingCriticalIds.map(toLabel),
-            ...missingSecondaryIds.map(toLabel),
-        ],
-
-        totalKeywords: criticalIds.length + secondaryIds.length,
-
-        criticalCount: criticalIds.length,
-        secondaryCount: secondaryIds.length,
-    };
+  return {
+    score,
+    matchedCritical,
+    missingCritical,
+    matchedSecondary,
+    missingSecondary,
+    matched: [...matchedCritical, ...matchedSecondary],
+    missing: [...missingCritical, ...missingSecondary],
+    totalKeywords: critical.length + secondary.length,
+  };
 }
 
 function keywordDensity(text = '', keywords = []) {
-    const normalized = normalizeForMatching(text);
+  const totalWords = tokenize(text).length || 1;
+  const normalizedText = normalize(text);
+  let keywordHits = 0;
 
-    const totalWords =
-        tokenize(text).length || 1;
+  keywords.forEach((kw) => {
+    const matches = normalizedText.match(buildBoundaryRegex(kw, 'g'));
+    if (matches) keywordHits += matches.length;
+  });
 
-    let hits = 0;
-
-    keywords.forEach((keyword) => {
-        const canonical = ALIAS_TO_CANONICAL[
-            String(keyword).toLowerCase()
-        ];
-
-        const aliases = canonical ?
-            SKILL_GROUPS[canonical] || [keyword] :
-            [keyword];
-
-        aliases.forEach((alias) => {
-            const escaped = alias
-                .toLowerCase()
-                .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                .replace(/\s+/g, '\\s+');
-
-            const regex = new RegExp(
-                `(^|[^a-z0-9+#])${escaped}([^a-z0-9+#]|$)`,
-                'gi'
-            );
-
-            hits += (normalized.match(regex) || []).length;
-        });
-    });
-
-    return Math.round(
-        (hits / totalWords) * 1000
-    ) / 10;
+  return Math.round((keywordHits / totalWords) * 1000) / 10; // percentage w/ 1 decimal
 }
 
 module.exports = {
-    SKILL_GROUPS,
-    SKILL_LABELS,
-    KNOWN_SKILLS: Object.values(SKILL_LABELS),
-
-    JD_BOILERPLATE,
-
-    extractCanonicalSkills,
-    extractKnownSkills,
-    countSkillOccurrences,
-
-    extractFrequentKeywords,
-    extractFrequentPhrases,
-
-    standardizeText: normalizeForMatching,
-
-    extractPreferredSection,
-    extractJDKeywords,
-    analyzeKeywordMatch,
-    keywordDensity,
+  KNOWN_SKILLS,
+  JD_BOILERPLATE,
+  buildBoundaryRegex,
+  extractKnownSkills,
+  countSkillOccurrences,
+  extractFrequentKeywords,
+  extractPreferredSection,
+  extractJDKeywords,
+  analyzeKeywordMatch,
+  keywordDensity,
 };
